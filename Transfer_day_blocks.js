@@ -1,13 +1,13 @@
-/***** НАСТРОЙКИ *****/
-const SRC_SHEET_NAME = 'Data source';   // источник
-const DATE_COL = 5;                    // колонка E (1-based)
+/***** SETTINGS *****/
+const SRC_SHEET_NAME = 'Data source';   // source
+const DATE_COL = 5;                    // column E (1-based)
 const COPY_COL_START = 2;              // B
 const COPY_COL_END = 6;                // F
-const HEADER_ROW = 1;                  // строка заголовков
-const BLANK_GAP = 2;                   // пустых строк между блоками
-const TOTAL_BG = '#b7e1cd';            // цвет заливки итоговой строки (как просили)
+const HEADER_ROW = 1;                  // header row
+const BLANK_GAP = 2;                   // blank rows between blocks
+const TOTAL_BG = '#b7e1cd';            // fill color for the total row (as requested)
 
-/** Карта: номер месяца (0-11) -> имя листа на иврите */
+/** Map: month number (0-11) -> sheet name in Hebrew */
 const HE_MONTHS = [
   '01/2025','02/2025','03/2025','04/2025','05/2025','06/2025',
   '07/2025','08/2025','09/2025','10/2025','11/2025','12/2025'
@@ -21,15 +21,15 @@ function menuTransferByDate() {
   transferByDate(dateStr);
 }
 
-/***** ОСНОВНАЯ ЛОГИКА *****/
+/***** CORE LOGIC *****/
 
 /**
- * Переносит все строки с указанной датой как один блок:
- * - B..F копируются подряд
+ * Transfers all rows with the specified date as a single block:
+ * - B..F are copied consecutively
  * - A = 1..N
- * - строки блока группируются (итоговая строка НЕ в группе)
- * - сразу под блоком: E = дата, F = сумма(F), строка залита TOTAL_BG на всю ширину
- * - между блоками ровно BLANK_GAP пустых строк
+ * - block rows are grouped (the total row is NOT in the group)
+ * - right under the block: E = date, F = SUM(F), the row is filled with TOTAL_BG across the entire width
+ * - exactly BLANK_GAP blank rows between blocks
  */
 function transferByDate(dateStr) {
   const ss = SpreadsheetApp.getActive();
@@ -53,7 +53,7 @@ function transferByDate(dateStr) {
     if (sameDay(cDate, d)) {
       const row = allValues[i].slice();
       const eIdx = DATE_COL - COPY_COL_START;
-      if (row[eIdx]) row[eIdx] = formatDateOnly(cDate); // только дата в E
+      if (row[eIdx]) row[eIdx] = formatDateOnly(cDate); // date only in E
       rowsToCopy.push(row);
     }
   }
@@ -63,32 +63,32 @@ function transferByDate(dateStr) {
     return;
   }
 
-  // Начало блока (с учетом отступа)
+  // Block start (taking the offset into account)
   const startRow = nextBlockStartRow(target, COPY_COL_START, COPY_COL_END, BLANK_GAP);
 
-  // 1) Вставляем B..F подряд
+  // 1) Insert B..F consecutively
   target.getRange(startRow, COPY_COL_START, rowsToCopy.length, width).setValues(rowsToCopy);
 
-  // 2) Колонка A: 1..N
+  // 2) Column A: 1..N
   const counter = Array.from({ length: rowsToCopy.length }, (_, i) => [i + 1]);
   target.getRange(startRow, 1, rowsToCopy.length, 1).setValues(counter);
 
-  // 3) Сгруппировать строки БЛОКА (без итоговой)
+  // 3) Group BLOCK rows (without the total)
   target
     .getRange(startRow, 1, rowsToCopy.length, target.getLastColumn())
-    .shiftRowGroupDepth(1); // создаём группу строк
+    .shiftRowGroupDepth(1); // create row group
 
-  // 4) Итоговая строка сразу под блоком
+  // 4) Total row right under the block
   const totalsRowIndex = startRow + rowsToCopy.length;
   const dateText = formatDateOnly(d);
   const sumF = sumColumnF(rowsToCopy);
 
-  // очистим строку и проставим E и F
+  // clear the row and set E and F
   target.getRange(totalsRowIndex, 1, 1, target.getLastColumn()).clearContent();
   target.getRange(totalsRowIndex, DATE_COL).setValue(dateText).setNumberFormat('dd/MM/yyyy'); // E
   target.getRange(totalsRowIndex, COPY_COL_END).setValue(sumF);                                // F
 
-  // заливка итоговой строки НА ВСЮ СТРОКУ
+  // fill the total row ACROSS THE WHOLE ROW
   target.getRange(totalsRowIndex, 1, 1, target.getLastColumn()).setBackground(TOTAL_BG);
   
   SpreadsheetApp.getUi().alert(
@@ -97,7 +97,7 @@ function transferByDate(dateStr) {
 }
 
 /**
- * Пакетный перенос всех дат (каждый блок + группировка + итоговая строка).
+ * Batch transfer for all dates (each block + grouping + total row).
  */
 function transferAllDates() {
   const ss = SpreadsheetApp.getActive();
@@ -111,7 +111,7 @@ function transferAllDates() {
   const allValues = src.getRange(HEADER_ROW + 1, COPY_COL_START, lastRow - HEADER_ROW, width).getValues();
   const dateValues = src.getRange(HEADER_ROW + 1, DATE_COL, lastRow - HEADER_ROW, 1).getValues();
 
-  // группировка строк по «чистой» дате
+  // group rows by “clean” date
   const grouped = {};
   for (let i = 0; i < dateValues.length; i++) {
     const cDate = coerceDate(dateValues[i][0]);
@@ -140,12 +140,12 @@ function transferAllDates() {
     const counter = Array.from({ length: rows.length }, (_, i) => [i + 1]);
     target.getRange(startRow, 1, rows.length, 1).setValues(counter);
 
-    // Группировка строк блока
+    // Group block rows
     target
       .getRange(startRow, 1, rows.length, target.getLastColumn())
       .shiftRowGroupDepth(1);
 
-    // Итоговая строка
+    // Total row
     const totalsRowIndex = startRow + rows.length;
     const sumF = sumColumnF(rows);
     target.getRange(totalsRowIndex, 1, 1, target.getLastColumn()).clearContent();
@@ -161,7 +161,7 @@ function transferAllDates() {
   );
 }
 
-/***** УТИЛИТЫ *****/
+/***** UTILITIES *****/
 function ensureTargetSheet(ss, name) {
   let sh = ss.getSheetByName(name);
   if (!sh) sh = ss.insertSheet(name);
@@ -215,9 +215,9 @@ function formatDateOnly(d) {
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');
 }
 
-/** Сумма по колонке F в массиве строк B..F */
+/** Sum of column F in an array of B..F rows */
 function sumColumnF(rowsBF) {
-  const fIdx = COPY_COL_END - COPY_COL_START; // индекс F в срезе B..F
+  const fIdx = COPY_COL_END - COPY_COL_START; // index of F within the B..F slice
   let s = 0;
   for (const r of rowsBF) {
     const v = r[fIdx];
@@ -227,7 +227,7 @@ function sumColumnF(rowsBF) {
   return s;
 }
 
-/** Парсим число из строки/значения, поддержка "1,5" и "1.5" */
+/** Parse a number from string/value, supports "1,5" and "1.5" */
 function parseNumber(v) {
   if (typeof v === 'number') return v;
   if (typeof v === 'string') {
