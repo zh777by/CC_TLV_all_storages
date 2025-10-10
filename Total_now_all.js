@@ -1,12 +1,12 @@
 /**
- * Итог: лист "Total now all"
- * A: ITEM / DESCRIPTION (title case, объединение без учета регистра)
- * B: SKU CC# as in cataloque (YU/BY/HH; если нет — ITEM из BISQUE)
+ * Result: sheet "Total now all"
+ * A: ITEM / DESCRIPTION (title case, merged case-insensitively)
+ * B: SKU CC# as in cataloque (YU/BY/HH; if missing — ITEM from BISQUE)
  * C: BISQUE_IL (pcs)
  * D: YU_Storage (pcs)
  * E: BY_Storage (pcs)
  * F: HH_Storage (pcs)
- * G: TOTAL NOW ALL (pcs) = C+D+E+F (по центру, bold; цвет шрифта по условию)
+ * G: TOTAL NOW ALL (pcs) = C+D+E+F (centered, bold; font color by condition)
  */
 function buildTotalNowAll() {
   const TARGET_SHEET_NAME = 'Total now all';
@@ -66,11 +66,11 @@ function buildTotalNowAll() {
   }
 
   /**
-   * Быстрый однопроходный ридер листа:
-   *  - sum: Map(key → сумма TOTAL)
-   *  - label: Map(key → оригинальная первая подпись)
+   * Fast single-pass sheet reader:
+   *  - sum: Map(key → TOTAL sum)
+   *  - label: Map(key → original first label)
    *  - sku: Map(key → SKU CC#)
-   *  - descItem: Map(key → fallback ITEM (только для BISQUE))
+   *  - descItem: Map(key → fallback ITEM (BISQUE only))
    */
   function readSheetData(fileIdOrUrl, sheetName, needSku, needDescItem) {
     const ss = SpreadsheetApp.openById(normalizeId(fileIdOrUrl));
@@ -144,19 +144,19 @@ function buildTotalNowAll() {
     return { sum, label, sku, descItem };
   }
 
-  // Чтение источников (каждый — один вызов)
+  // Reading sources (each — one call)
   const bisque = readSheetData(SRC.BISQUE.id, SRC.BISQUE.sheetName, false, true);
   const yu     = readSheetData(SRC.YU.id,     SRC.YU.sheetName,     true,  false);
   const by     = readSheetData(SRC.BY.id,     SRC.BY.sheetName,     true,  false);
   const hh     = readSheetData(SRC.HH.id,     SRC.HH.sheetName,     true,  false);
 
-  // Полный набор ключей
+  // Full set of keys
   const keySet = new Set([
     ...bisque.sum.keys(), ...yu.sum.keys(), ...by.sum.keys(), ...hh.sum.keys(),
     ...yu.sku.keys(), ...by.sku.keys(), ...hh.sku.keys(), ...bisque.descItem.keys()
   ]);
 
-  // Сортировка по «красивой» метке из BISQUE (если есть)
+  // Sort by a “nice” label from BISQUE (if present)
   const keys = Array.from(keySet).sort((a,b) => {
     const la = bisque.label.get(a) || a;
     const lb = bisque.label.get(b) || b;
@@ -191,35 +191,35 @@ function buildTotalNowAll() {
     ];
   });
 
-  // Рендер на целевой лист
+  // Render to the target sheet
   const ssTarget = SpreadsheetApp.getActiveSpreadsheet();
   const shTarget = ssTarget.getSheetByName(TARGET_SHEET_NAME) || ssTarget.insertSheet(TARGET_SHEET_NAME);
 
   shTarget.clearFormats();
   shTarget.clear();
 
-  // Заголовок
+  // Header
   shTarget.getRange(1, 1, 1, header.length)
     .setValues([header])
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
 
   if (rowsAF.length) {
-    // Данные A–F
+    // Data A–F
     shTarget.getRange(2, 1, rowsAF.length, 6).setValues(rowsAF);
 
-    // Колонка G – формула и формат
+    // Column G – formula and format
     shTarget.getRange(2, 7, rowsAF.length, 1)
       .setFormulasR1C1(Array(rowsAF.length).fill(['=SUM(RC[-4]:RC[-1])']))
       .setNumberFormat('0')
       .setHorizontalAlignment('center')
       .setFontWeight('bold');
 
-    // Формат чисел в C:F, выравнивание B:G
+    // Number format in C:F, alignment B:G
     shTarget.getRange(2, 3, rowsAF.length, 4).setNumberFormat('0');
     shTarget.getRange(2, 2, rowsAF.length, 6).setHorizontalAlignment('center');
 
-    // Условная окраска G
+    // Conditional coloring for G
     const gRange = shTarget.getRange(2, 7, rowsAF.length, 1);
     const gEndRow = 1 + rowsAF.length;
     let rules = shTarget.getConditionalFormatRules() || [];
@@ -253,10 +253,10 @@ function buildTotalNowAll() {
     shTarget.setConditionalFormatRules(rules);
   }
 
-  // Заморозка шапки
+  // Freeze header row
   shTarget.setFrozenRows(1);
 
-  // Полосатая заливка вручную (совместимо везде)
+  // Manual banded fill (compatible everywhere)
   shTarget.getBandings().forEach(b => b.remove());
   const totalCols = 7;
   const HEADER_BG = '#AFC4E2';
@@ -273,12 +273,12 @@ function buildTotalNowAll() {
     bodyRange.setBackgrounds(bg);
   }
 
-  // Авто-ширина
+  // Auto width
   shTarget.autoResizeColumns(1, header.length);
 }
 
 /**
- * Сортировка по столбцу G (TOTAL NOW ALL)
+ * Sort by column G (TOTAL NOW ALL)
  */
 function sortTotalNowAll_(asc) {
   const TARGET_SHEET_NAME = 'Total now all';
