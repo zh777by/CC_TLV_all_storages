@@ -1,8 +1,8 @@
-/***** НАСТРОЙКИ *****/
+/***** SETTINGS *****/
 const VALID_SHEETS = ["COLORS", "STORAGE"];
-const DATA_START_ROW = 3; // с какой строки начинаются товары
+const DATA_START_ROW = 3; // the row where items start
 
-/***** УТИЛИТЫ *****/
+/***** UTILITIES *****/
 function columnToLetter(column) {
   let letter = "";
   while (column > 0) {
@@ -14,7 +14,7 @@ function columnToLetter(column) {
 }
 function _norm(v){ return String(v || "").toLowerCase().trim(); }
 
-/** Найти индекс (1-based) колонки "TOTAL NOW" по строке 1 */
+/** Find the (1-based) index of the "TOTAL NOW" column using row 1 */
 function getTotalNowCol(sheet) {
   const header1 = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const idx = header1.findIndex(h => String(h).trim() === "TOTAL NOW");
@@ -22,21 +22,21 @@ function getTotalNowCol(sheet) {
   return idx + 1;
 }
 
-/** Карта блоков: поддержка 2-, 3- и 4-колоночных блоков; индексы 0-based */
+/** Blocks map: supports 2-, 3-, and 4-column blocks; indices are 0-based */
 function getBlocksMap(headerRow2Values) {
   const h = headerRow2Values.map(_norm);
   const res = [];
   for (let i = 0; i < h.length; i++) {
     const a = h[i], b = h[i+1], c = h[i+2], d = h[i+3];
 
-    // 2-колоночный: (in… | out… | out to floor…) + Total
+    // 2-column: (in… | out… | out to floor…) + Total
     if (((a && a.startsWith("in")) || (a && a.startsWith("out")) || (a && a.startsWith("out to floor"))) && b === "total") {
       res.push({ startCol: i, size: 2, labels: [headerRow2Values[i], headerRow2Values[i+1]] });
       i += 1;
       continue;
     }
 
-    // 3-колоночный: in… | out to floor… | Total
+    // 3-column: in… | out to floor… | Total
     if ((a && a.startsWith("in")) &&
         (b && b.startsWith("out to floor")) &&
         c === "total") {
@@ -45,7 +45,7 @@ function getBlocksMap(headerRow2Values) {
       continue;
     }
 
-    // 4-колоночный: in… | out… | out to floor… | Total
+    // 4-column: in… | out… | out to floor… | Total
     if ((a && a.startsWith("in")) &&
         (b && b.startsWith("out")) &&
         (c && c.startsWith("out to floor")) &&
@@ -61,7 +61,7 @@ function getBlocksMap(headerRow2Values) {
   return res;
 }
 
-/** Первая колонка самого первого блока (1-based). Если блоков нет — fallback F=6, иначе слева от первого Total. */
+/** First column of the very first block (1-based). If there are no blocks — fallback F=6; otherwise the column to the left of the first Total. */
 function getFirstBlockStartCol(sheet) {
   const lastCol = sheet.getLastColumn();
   if (!lastCol) return 6;
@@ -71,40 +71,41 @@ function getFirstBlockStartCol(sheet) {
 
   const h = header2.map(_norm);
   const firstTotalIdx = h.findIndex(v => v === "total");
-  if (firstTotalIdx > 0) return firstTotalIdx; // колонка слева от первого Total (1-based)
+  if (firstTotalIdx > 0) return firstTotalIdx; // column to the left of the first Total (1-based)
   return 6;
 }
 
-/** Формула TOTAL NOW: берём значение из последнего столбца, где во 2-й строке "Total" */
+/** TOTAL NOW formula: take the value from the last column where row 2 equals "Total" */
 function buildTotalNowFormulaA1(row, firstBlockStartCol, lastCol) {
   const firstColLetter = columnToLetter(firstBlockStartCol);
   const lastColLetter  = columnToLetter(lastCol);
   return `=IFERROR(INDEX(${row}:${row}, MAX(FILTER(COLUMN(${firstColLetter}$2:${lastColLetter}$2), ${firstColLetter}$2:${lastColLetter}$2="Total"))), "")`;
 }
 
-/** Числовой формат для колонки (чтобы статус-бар всегда показывал сумму) */
+/** Numeric format for a column (so the status bar always shows a sum) */
 function enforceNumberFormatForColumn(sheet, startRow, col, numRows) {
   if (numRows <= 0) return;
   sheet.getRange(startRow, col, numRows, 1).setNumberFormat("0.############");
 }
 
-/** Применить числовую валидацию (>=0 по умолчанию) к диапазону */
-function applyNumberValidation(range, minZero = true) {
+/** Apply numeric validation (>=0 by default) to a range.
+ *  allowInvalid=true — show a warning but do NOT block (so formulas pass).
+ */
+function applyNumberValidation(range, minZero = true, allowInvalid = true) {
   const b = SpreadsheetApp.newDataValidation();
-  if (minZero) {
-    range.setDataValidation(b.requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).build());
-  } else {
-    range.setDataValidation(b.requireNumberBetween(-1e12, 1e12).setAllowInvalid(false).build());
-  }
+  const builder = minZero
+    ? b.requireNumberGreaterThanOrEqualTo(0)
+    : b.requireNumberBetween(-1e12, 1e12);
+  range.setDataValidation(builder.setAllowInvalid(allowInvalid).build());
 }
 
-/** Снять защиты, если есть */
+/** Remove protections if present */
 function removeProtections(sheet) {
   try { (sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE) || []).forEach(p => p.remove()); } catch (e) {}
   try { (sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET) || []).forEach(p => p.remove()); } catch (e) {}
 }
 
-/** Условное форматирование TOTAL NOW: <20 оранжевый, <10 красный */
+/** Conditional formatting for TOTAL NOW: <20 orange, <10 red */
 function applyTotalNowConditionalFormatting(sheet, totalNowCol) {
   const rules = sheet.getConditionalFormatRules() || [];
   const startRow = DATA_START_ROW;
@@ -126,12 +127,12 @@ function applyTotalNowConditionalFormatting(sheet, totalNowCol) {
   sheet.setConditionalFormatRules([...filtered, orangeRule, redRule]);
 }
 
-/***** ДОБАВЛЕНИЕ НОВОГО ДНЕВНОГО БЛОКА *****/
+/***** ADDING A NEW DAILY BLOCK *****/
 /**
  * mode: "IN" | "OUT" | "out to floor"
- * Вставляет ДВЕ колонки: <mode> | Total
- * Новый Total считается от предыдущего Total: +IN, −OUT, −out to floor
- * Колонка ввода получает числовой формат и валидацию (>=0), содержимое очищается.
+ * Inserts TWO columns: <mode> | Total
+ * New Total is calculated from the previous Total: +IN, −OUT, −out to floor
+ * The input column gets numeric format and validation (>=0); its contents are cleared.
  */
 function addNewDayBlock(mode, sheetName) {
   if (!VALID_SHEETS.includes(sheetName)) return;
@@ -148,45 +149,45 @@ function addNewDayBlock(mode, sheetName) {
   const lastColBefore = sheet.getLastColumn();
   const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
 
-  // Добавляем 2 новые колонки: <mode> | Total
+  // Add 2 new columns: <mode> | Total
   sheet.insertColumnsAfter(lastColBefore, 2);
   const startCol = lastColBefore + 1;
   const valueCol = startCol;
   const totalCol = startCol + 1;
 
-  // Строка 1: дата на 2 колонки
+  // Row 1: date spanning 2 columns
   sheet.getRange(1, startCol, 1, 2)
     .merge()
     .setValue(date)
     .setHorizontalAlignment("center")
     .setVerticalAlignment("middle");
 
-  // Строка 2: подписи
+  // Row 2: labels
   const label = (mode === "in") ? "IN" : (mode === "out") ? "OUT" : "out to floor";
   sheet.getRange(2, valueCol).setValue(label);
   sheet.getRange(2, totalCol).setValue("Total");
 
-  // Формат шапки блока
+  // Block header formatting
   sheet.getRange(2, valueCol, 1, 2)
     .setHorizontalAlignment("center")
     .setVerticalAlignment("middle")
     .setWrap(true);
   try { sheet.autoResizeRows(2, 1); } catch (e) {}
 
-  // Страховка: выровнять всю строку 2
+  // Safety: normalize the entire row 2 alignment
   try { normalizeHeaderRow2Alignment(sheetName); } catch (e) {}
 
-  // Формулы и формат, если есть строки с данными
+  // Formulas & formatting if there are data rows
   if (totalRows >= DATA_START_ROW) {
     const rowsCount = totalRows - DATA_START_ROW + 1;
 
-    // 1) Подготовка вводной колонки: очистка + формат + валидация (>=0)
+    // 1) Prepare the input column: clear + format + validation (>=0, but allowInvalid=true)
     const inputRange = sheet.getRange(DATA_START_ROW, valueCol, rowsCount, 1);
     inputRange.clearContent();
     enforceNumberFormatForColumn(sheet, DATA_START_ROW, valueCol, rowsCount);
-    applyNumberValidation(inputRange, true);
+    applyNumberValidation(inputRange, true, true); // warn but don’t block (to allow formulas)
 
-    // 2) Формула Total = prevTotal ± value
+    // 2) Formula Total = prevTotal ± value
     const prevTotalCol = lastColBefore;
     const formulas = [];
     for (let r = DATA_START_ROW; r <= totalRows; r++) {
@@ -198,7 +199,7 @@ function addNewDayBlock(mode, sheetName) {
     sheet.getRange(DATA_START_ROW, totalCol, rowsCount, 1).setFormulas(formulas);
     enforceNumberFormatForColumn(sheet, DATA_START_ROW, totalCol, rowsCount);
 
-    // 3) TOTAL NOW по последнему "Total"
+    // 3) TOTAL NOW from the rightmost "Total"
     const totalNowCol = getTotalNowCol(sheet);
     const firstBlockStartCol = getFirstBlockStartCol(sheet);
     const totalNowFormulas = [];
@@ -208,18 +209,18 @@ function addNewDayBlock(mode, sheetName) {
     }
     sheet.getRange(DATA_START_ROW, totalNowCol, rowsCount, 1).setFormulas(totalNowFormulas);
 
-    // 4) Условное форматирование для TOTAL NOW
+    // 4) Conditional formatting for TOTAL NOW
     applyTotalNowConditionalFormatting(sheet, totalNowCol);
   }
 
   SpreadsheetApp.flush();
 }
 
-/***** ВОССТАНОВЛЕНИЕ ФОРМУЛ ВО ВСЕХ "Total"
- * Правила:
- *  - 4-кол.: Total = N(in) + N(out) - N(out to floor) - N(prevTotal)
- *  - 3-кол.: Total = N(in) + N(out to floor) - N(prevTotal)
- *  - 2-кол.: Total = N(prevTotal) ± N(value), знак по метке слева (in => +, out => -)
+/***** RESTORING FORMULAS IN ALL "Total"
+ * Rules:
+ *  - 4-col.: Total = N(in) + N(out) - N(out to floor) - N(prevTotal)
+ *  - 3-col.: Total = N(in) + N(out to floor) - N(prevTotal)
+ *  - 2-col.: Total = N(prevTotal) ± N(value), sign from the label on the left (in => +, out => -)
  * N(x) := IFERROR(VALUE(TRIM(x)),0)
 *****/
 function ensureFormulasInAllTotals(sheet) {
@@ -268,7 +269,7 @@ function ensureFormulasInAllTotals(sheet) {
   }
 }
 
-/***** ОБНОВЛЕНИЕ ТЕКУЩЕГО ДНЕВНОГО БЛОКА (2/3/4-кол.) *****/
+/***** UPDATE THE CURRENT DAILY BLOCK (2/3/4-column) *****/
 function updateDayBlock(sheetName) {
   if (!VALID_SHEETS.includes(sheetName)) return;
 
@@ -284,7 +285,7 @@ function updateDayBlock(sheetName) {
   const headerRow2Raw = sheet.getRange(2, 1, 1, totalCols).getValues()[0];
   const h2 = headerRow2Raw.map(_norm);
 
-  // все "Total" (1-based)
+  // all "Total" columns (1-based)
   const totalColIdxs = [];
   for (let i = 0; i < h2.length; i++) if (h2[i] === "total") totalColIdxs.push(i + 1);
   if (!totalColIdxs.length) return;
@@ -292,7 +293,7 @@ function updateDayBlock(sheetName) {
   const newestTotalCol = totalColIdxs[totalColIdxs.length - 1];
   const nRows = totalRows - startRow + 1;
 
-  // тип блока по шапке слева
+  // determine block type by headers to the left
   const is4col =
     newestTotalCol >= 4 &&
     (h2[newestTotalCol - 4] && h2[newestTotalCol - 4].startsWith("in")) &&
@@ -326,10 +327,10 @@ function updateDayBlock(sheetName) {
     sheet.getRange(startRow, newestTotalCol, nRows, 1).setFormulasR1C1(formulasR1C1);
   }
 
-  // Подстрахуемся: восстановим формулы во всех остальных Total
+  // As a safeguard: restore formulas in all other "Total"
   ensureFormulasInAllTotals(sheet);
 
-  // Пересобрать TOTAL NOW (берём значение из самого правого "Total")
+  // Rebuild TOTAL NOW (take the value from the rightmost "Total")
   const totalNowCol = getTotalNowCol(sheet);
   const firstBlockStartCol = getFirstBlockStartCol(sheet);
   const lastColLetter  = columnToLetter(totalCols);
@@ -341,7 +342,7 @@ function updateDayBlock(sheetName) {
   }
   sheet.getRange(startRow, totalNowCol, nRows, 1).setFormulas(totalNowFormulas);
 
-  // Оформление и числовой формат для value/Total
+  // Styling and numeric format for value/Total
   applyTotalNowConditionalFormatting(sheet, totalNowCol);
   enforceNumberFormatForColumn(sheet, startRow, newestTotalCol - 1, nRows); // value
   enforceNumberFormatForColumn(sheet, startRow, newestTotalCol,     nRows); // Total
@@ -349,7 +350,7 @@ function updateDayBlock(sheetName) {
   SpreadsheetApp.flush();
 }
 
-/***** ВЫРАВНИВАНИЕ ШАПКИ (СТРОКА 2) *****/
+/***** HEADER ALIGNMENT (ROW 2) *****/
 function normalizeHeaderRow2Alignment(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(sheetName);
@@ -366,22 +367,44 @@ function normalizeHeaderRow2Alignment(sheetName) {
   try { sh.autoResizeRows(2, 1); } catch (e) {}
 }
 
-/***** UI И ИНИЦИАЛИЗАЦИЯ *****/
+/***** SIMPLIFY/RELAX VALIDATION FOR EXISTING BLOCKS *****/
+function relaxValidationForInputColumns(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < DATA_START_ROW || !lastCol) return;
+
+  const rowsCount = lastRow - DATA_START_ROW + 1;
+  const h2 = sheet.getRange(2, 1, 1, lastCol).getValues()[0].map(_norm);
+
+  for (let c = 1; c <= lastCol; c++) {
+    const head = h2[c - 1];
+    if (!head) continue;
+    if (head.startsWith("in") || head.startsWith("out") || head.startsWith("out to floor")) {
+      const rng = sheet.getRange(DATA_START_ROW, c, rowsCount, 1);
+      applyNumberValidation(rng, true, true); // warn, don’t block
+    }
+  }
+}
+
+/***** UI AND INITIALIZATION *****/
 function onOpen() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   VALID_SHEETS.forEach(name => {
     const sh = ss.getSheetByName(name);
     if (!sh) return;
 
-    // Всегда перезаписываем список действий в A1
+    // Always rewrite the action list in A1
     ensureActionDropdown(sh);
 
-    // Выровнять шапку (строку 2)
+    // Align header (row 2)
     try { normalizeHeaderRow2Alignment(name); } catch (e) {}
+
+    // Relax validation in input columns so formulas aren’t blocked
+    try { relaxValidationForInputColumns(sh); } catch (e) {}
   });
 }
 
-/** Выпадающее меню в A1: одинаковое для всех листов */
+/** Dropdown in A1: same for all sheets */
 function ensureActionDropdown(sheet) {
   const actions = [
     "➕ Add new day block (IN)",
@@ -398,23 +421,23 @@ function ensureActionDropdown(sheet) {
   sheet.getRange("A1").setDataValidation(rule).setValue("");
 }
 
-/***** ОБРАБОТЧИК ИЗМЕНЕНИЙ С ЗАЩИТОЙ ОТ ДУБЛЕЙ *****/
+/***** EDIT HANDLER WITH DEBOUNCE AGAINST DUPLICATES *****/
 function _debounceOnce_(key, windowMs) {
   const props = PropertiesService.getDocumentProperties();
   const now = Date.now();
   const raw = props.getProperty('debounce:' + key);
   if (raw) {
     const ts = parseInt(raw, 10) || 0;
-    if (now - ts < windowMs) return false; // слишком рано — дубль
+    if (now - ts < windowMs) return false; // too soon — duplicate
   }
   props.setProperty('debounce:' + key, String(now));
   return true;
 }
 
-/** Преобразовать введённое значение к числу (поддержка , и .). Возвращает {ok,value} */
+/** Coerce input value to a number (supports , and .). Returns {ok,value} */
 function _coerceToNumber_(raw) {
   const s = String(raw || "").trim();
-  if (s === "") return { ok: true, value: "" }; // пустое допускаем
+  if (s === "") return { ok: true, value: "" }; // allow empty
   const normalized = s.replace(/\s+/g, "").replace(",", ".");
   const num = Number(normalized);
   if (Number.isFinite(num)) return { ok: true, value: num };
@@ -430,25 +453,25 @@ function onEdit(e) {
 
   const a1 = e.range.getA1Notation();
 
-  // 1) Обработка выпадашки в A1
+  // 1) Handle dropdown in A1
   if (a1 === "A1") {
     const val = String(e.value || "");
     if (!val) return;
 
-    // Анти-дубль №1
+    // Anti-duplicate #1
     const liveBefore = String(sheet.getRange("A1").getValue() || "");
     if (liveBefore !== val) return;
 
-    // Анти-дубль №2
+    // Anti-duplicate #2
     const ok = _debounceOnce_(sheet.getSheetId() + '|' + val, 2500);
     if (!ok) return;
 
-    // Сериализуем
+    // Serialize (take lock)
     const lock = LockService.getDocumentLock();
     lock.waitLock(30000);
 
     try {
-      // Анти-дубль №3
+      // Anti-duplicate #3
       const liveNow = String(sheet.getRange("A1").getValue() || "");
       if (liveNow !== val) return;
 
@@ -462,47 +485,54 @@ function onEdit(e) {
         updateDayBlock(sheetName);
       }
 
-      // гасим выпадашку
+      // clear the dropdown
       sheet.getRange("A1").setValue("");
 
     } finally {
       lock.releaseLock();
     }
-    return; // обработали A1
+    return; // handled A1
   }
 
-  // 2) Жёсткое приведение к числу ТОЛЬКО для редактируемых ячеек ввода (in/out/out to floor)
+  // 2) Strict coercion to number only for editable input cells (in/out/out to floor)
   const row = e.range.getRow();
   const col = e.range.getColumn();
-  if (row < DATA_START_ROW) return; // редактировать можно только в зоне данных
+  if (row < DATA_START_ROW) return; // only rows in the data area are editable
 
-  // метка второй строки над редактируемой колонкой
+  // the label in row 2 above the edited column
   const header2val = String(sheet.getRange(2, col).getValue() || "");
   const head = _norm(header2val);
   const isInputCol = head.startsWith("in") || head.startsWith("out") || head.startsWith("out to floor");
   if (!isInputCol) return;
 
-  // Приводим к числу: пустое оставляем пустым; иначе строго число
+  // if the user entered a formula — allow it
+  const hasFormula = !!e.range.getFormula();
+  if (hasFormula) {
+    e.range.setNumberFormat("0.############"); // format result as a number
+    return;
+  }
+
+  // numeric coercion for plain input
   const r = _coerceToNumber_(e.value);
   if (!r.ok) {
-    e.range.setValue(""); // сброс неверного ввода
+    e.range.setValue(""); // reset invalid input
     try { SpreadsheetApp.getActive().toast("Введите число (разделитель: . или ,).", "Неверный ввод", 3); } catch (err) {}
     return;
   }
 
   if (r.value === "") {
-    // пустое — оставляем пусто, но гарантируем числовой формат
+    // empty — leave empty, but enforce numeric format
     e.range.setNumberFormat("0.############");
     return;
   }
 
-  // корректное число: записываем числом и форматируем
+  // valid number: write as number and format
   e.range.setValue(r.value);
   e.range.setNumberFormat("0.############");
 }
 
-/***** СЕРВИСНЫЕ *****/
-/** Разовая починка формул во всех Total и TOTAL NOW */
+/***** SERVICE UTILITIES *****/
+/** One-time fix of formulas in all Total and TOTAL NOW */
 function fixAllTotalsAndTotalNow(sheetName) {
   if (!VALID_SHEETS.includes(sheetName)) return;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
@@ -526,11 +556,20 @@ function fixAllTotalsAndTotalNow(sheetName) {
   applyTotalNowConditionalFormatting(sheet, totalNowCol);
 }
 
-/** Удалить установленные (installable) onEdit-триггеры, если вдруг остались */
+/** Remove installable onEdit triggers if any remain */
 function removeInstallableOnEditTriggers() {
   ScriptApp.getProjectTriggers().forEach(t => {
     if (t.getEventType && t.getEventType() === ScriptApp.EventType.ON_EDIT) {
       ScriptApp.deleteTrigger(t);
     }
+  });
+}
+
+/** One-off utility: relax validations everywhere (useful after updating the script) */
+function onceAllowFormulasEverywhere() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  VALID_SHEETS.forEach(n => {
+    const sh = ss.getSheetByName(n);
+    if (sh) relaxValidationForInputColumns(sh);
   });
 }
