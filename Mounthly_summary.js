@@ -1,15 +1,15 @@
-/***** Цвета как на фото *****/
+/***** Colors as in the photo *****/
 const HEADER_BG   = '#63D297';
 const ODD_BG      = '#E8F8F2';
 const EVEN_BG     = '#F4FBF8';
 const HEADER_FONT = '#000000';
 
-/***** Имена месячных листов теперь в формате MM/YYYY (пример: '09/2025') *****/
+/***** Monthly sheet names are now in MM/YYYY format (example: '09/2025') *****/
 const SUMMARY_SHEET_NAME = 'PIVOT';
 const OLD_SUMMARY_SHEET_NAMES = ['סיכום חודשי'];
 
 /**
- * Сводная для активного месячного листа.
+ * Summary for the active monthly sheet.
  */
 function buildMonthlySummaryTable() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -144,7 +144,7 @@ function buildMonthlySummaryTable() {
 }
 
 /**
- * СВОДНАЯ ПО ВСЕМ МЕСЯЧНЫМ ЛИСТАМ → лист PIVOT.
+ * SUMMARY ACROSS ALL MONTHLY SHEETS → sheet PIVOT.
  */
 function buildAllMonthsSummary() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -152,7 +152,7 @@ function buildAllMonthsSummary() {
 
   const rows = [];
   for (const sh of sheets) {
-    const mnum = _monthNumFromSheetName(sh.getName()); // теперь ждём 'MM/YYYY'
+    const mnum = _monthNumFromSheetName(sh.getName()); // now expects 'MM/YYYY'
     if (!mnum) continue;
 
     const region = _findMonthlyTableRegion(sh);
@@ -183,7 +183,7 @@ function buildAllMonthsSummary() {
 
   rows.sort((a,b)=> a.y!==b.y ? a.y-b.y : a.m-b.m);
 
-  // создаём/переименовываем лист сводной в PIVOT
+  // create/rename the summary sheet to PIVOT
   const ssObj = SpreadsheetApp.getActiveSpreadsheet();
   let sum = ssObj.getSheetByName(SUMMARY_SHEET_NAME);
   if (!sum) {
@@ -240,12 +240,12 @@ function buildAllMonthsSummary() {
   sum.insertChart(chart);
 }
 
-/***** Совместимость со старым именем кнопки *****/
+/***** Backward compatibility with the old button name *****/
 function buildJuneSummaryTable(){ return buildMonthlySummaryTable(); }
 
-/***** Хелперы *****/
+/***** Helpers *****/
 
-/** Имя листа должно быть строго в формате 'MM/YYYY'. Возвращает номер месяца 1..12 или null. */
+/** The sheet name must be strictly in the 'MM/YYYY' format. Returns a month number 1..12 or null. */
 function _monthNumFromSheetName(name){
   const m = String(name || '').trim().match(/^(\d{2})\/(\d{4})$/);
   if (!m) return null;
@@ -349,3 +349,4 @@ function _findMonthlyTableRegion(sheet){
   }
   return null;
 }
+
