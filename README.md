@@ -1,59 +1,115 @@
 # CC_TLV_all_storages
 
-Google Apps Script for automating stock management in Google Sheets.  
-Designed to work with the `COLORS` and `STORAGE` sheets, it supports dynamic daily blocks (`IN`, `OUT`, `out to floor`), automatic recalculation of totals, and numeric input validation.
+This Google Apps Script streamlines inventory tracking on **COLORS** and **STORAGE** sheets by adding dated “daily blocks” (IN / OUT / out to floor), recalculating per-block **Total**, and keeping the **TOTAL NOW** column up-to-date. It also standardizes formulas and validations so numeric input and formulas work smoothly.
 
----
+## Features
 
-## ✨ Features
-- ➕ **Add daily blocks** (`IN`, `OUT`, `out to floor`) with one click.  
-- 🔄 **Update the latest block** (restore all `Total` and `TOTAL NOW` formulas).  
-- ✅ **Automatic validation**: only numeric input is allowed (supports both `,` and `.` as decimal separators).  
-- 📊 **TOTAL NOW column** always reflects the latest total from the last block.  
-- 🎨 **Conditional formatting** for `TOTAL NOW`:  
-  - value < 20 → orange  
-  - value < 10 → red  
-- 🔐 **Automatic protection removal and header alignment**.  
-- 🛡 **Anti-duplicate execution**: three levels of checks prevent accidental double triggers.  
+* **Daily blocks** with automatic headers (date in row 1, labels in row 2)
 
----
+  * 2-column: `<IN|OUT|out to floor> | Total`
+  * 3-column: `IN | out to floor | Total`
+  * 4-column: `IN | OUT | out to floor | Total`
+* **Automatic Total formulas** per block (see logic below)
+* **TOTAL NOW** always pulls the value from the **rightmost** “Total” column
+* **Action dropdown** in cell `A1` on each working sheet
+* **Numeric formats & validations**: formulas allowed, soft numeric checks for manual input
+* **Conditional formatting** on `TOTAL NOW`: `<20` orange; `<10` red
+* Temporarily **removes protections** to safely update headers/formulas
 
-## 🛠 Installation
-1. Open the target Google Spreadsheet.  
-2. Go to **Extensions → Apps Script**.  
-3. Create a new script file (e.g., `All_storages.js`).  
-4. Copy the code from [`All_storages.js`](./All_storages.js) into the editor.  
-5. Save the project and return to the spreadsheet.  
+## Sheet Assumptions
 
-After refreshing the spreadsheet, the script automatically adds a dropdown menu in **cell A1** on the `COLORS` and `STORAGE` sheets.
+* Processed sheets are listed in `VALID_SHEETS` (default: **COLORS**, **STORAGE**).
+* **Row 1**: date (merged across the block) when a new block is added.
+* **Row 2**: block labels (`IN`, `OUT`, `out to floor`, `Total`).
+* Data starts from `DATA_START_ROW` (default **3**).
+* A **`TOTAL NOW`** column exists in **row 1** (the script auto-detects it).
 
----
+## Calculation Logic
 
-## 🚀 Usage
-- In **cell A1**, you’ll see a dropdown menu with actions:
-  - `➕ Add new day block (IN)` — adds an inbound block.  
-  - `➕ Add new day block (OUT)` — adds an outbound block.  
-  - `➕ Add new day block (out to floor)` — adds a block for “moved to floor/sales area”.  
-  - `🔁 Update new day block` — restores formulas and updates `TOTAL NOW`.  
+Let `N(x) = IFERROR(VALUE(TRIM(x)), 0)`
 
-- Formulas are applied automatically:  
-  - Each **Total** column calculates based on the previous total and the new values.  
-  - The **TOTAL NOW** column always reflects the rightmost `Total` value.  
+* **4-column block**
+  `Total = N(IN) + N(OUT) − N(out to floor) − N(prevTotal)`
+* **3-column block**
+  `Total = N(IN) + N(out to floor) − N(prevTotal)`
+* **2-column block**
+  `Total = N(prevTotal) ± N(value)`
+  (sign from left label: `IN` → `+`, `OUT`/`out to floor` → `−`)
 
-- Invalid input is automatically cleared, and a toast notification warns the user.  
+`prevTotal` is the **Total** of the previous block (immediately to the left).
 
----
+### `TOTAL NOW` Formula
 
-## 🎥 Full Demo (1–2 min)
-[![Watch the Full Demo](https://img.youtube.com/vi/VIDEO_ID_FULL/0.jpg)](https://www.youtube.com/watch?v=VIDEO_ID_FULL)
+For each data row, `TOTAL NOW` reads from the **rightmost** “Total” in row 2:
 
----
+```excel
+=IFERROR(
+  INDEX(ROW:ROW,
+    MAX(FILTER(COLUMN(FirstBlockStart$2:Last$2),
+               FirstBlockStart$2:Last$2="Total"))
+  ),
+"")
+```
 
-## 🎬 Short Promo (under 60s)
-[![Watch the Short Promo](https://img.youtube.com/vi/VIDEO_ID_SHORT/0.jpg)](https://www.youtube.com/watch?v=VIDEO_ID_SHORT)
+`FirstBlockStart` is the first column of the first block; `Last` is the last column on the sheet.
 
----
+## Usage
 
-## 📂 Structure
-﻿# CC_TLV_all_storages
+### Action Dropdown (A1)
+
+Each sheet in `VALID_SHEETS` gets a dropdown in **A1**:
+
+* `➕ Add new day block (IN)` → adds **IN | Total**
+* `➕ Add new day block (OUT)` → adds **OUT | Total**
+* `➕ Add new day block (out to floor)` → adds **out to floor | Total**
+* `🔁 Update new day block` → recalculates the newest block’s **Total**, fixes all Totals, and refreshes **TOTAL NOW**
+
+Pick an action; the script runs and then clears A1.
+
+### Data Entry
+
+* Editable input columns are those labeled `IN`, `OUT`, `out to floor`.
+* **Manual input** must be numeric (supports `.` or `,` as decimal separator).
+* **Formulas are allowed**; results are formatted as numeric.
+
+## What the Script Does Automatically
+
+* Writes **date** for a new block (row 1, merged across the block)
+* Formats block headers (row 2: centered, wrapped)
+* Applies numeric format `0.############` to inputs and Totals
+* Adds **soft numeric validation** (warns but does not block formulas)
+* Repairs **all** “Total” formulas when needed
+* Keeps **TOTAL NOW** in sync with the rightmost “Total”
+* Adds **conditional formatting** on `TOTAL NOW`
+  (`<20` → orange text, `<10` → red text)
+
+## Public Functions
+
+* `addNewDayBlock(mode, sheetName)`
+  Adds a new 2-column block `<mode> | Total`.
+  `mode`: `"IN"` | `"OUT"` | `"out to floor"` (case-insensitive)
+  `sheetName`: a sheet in `VALID_SHEETS`.
+
+* `updateDayBlock(sheetName)`
+  Recomputes the newest block’s **Total**, then ensures all Totals and updates `TOTAL NOW`.
+
+* `fixAllTotalsAndTotalNow(sheetName)`
+  One-off repair of all **Total** formulas and `TOTAL NOW`.
+
+* `onceAllowFormulasEverywhere()`
+  Softens validations in all input columns across `VALID_SHEETS` (useful after updates).
+
+* `removeInstallableOnEditTriggers()`
+  Removes legacy installable `OnEdit` triggers (cleanup utility).
+
+## Configuration
+
+* `VALID_SHEETS`: list of sheet names to manage
+* `DATA_START_ROW`: first data row (default `3`)
+
+## Changelog (placeholder)
+
+* **v1.0** — Initial release: daily blocks, Total formulas, TOTAL NOW, action dropdown, validations, conditional formatting.
+
+
 
